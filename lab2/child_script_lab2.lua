@@ -112,6 +112,14 @@ function sysCall_init()
     stepList[16] = {"stop"}
     stepList[17] = {"repeat"}
 
+    -- Number of times that we executed the stepList
+    executionCounter = 0
+    maxExecutions = 10
+
+    -- Save robot's final x, y coordinates for computing a covariance matrix
+    final_x_positions = {}
+    final_y_positions = {}
+
     -- Target positions for joints (radians)
     -- These are set when a new movement state is started
     motorAngleTargetL = 0.0
@@ -165,7 +173,58 @@ function isCurrentTargetAchieved(posL, posR)
 end
 
 
-function sysCall_actuation() 
+function mean(t)
+    local sum = 0
+    for _, val in pairs(t) do
+        sum = sum + val
+    end
+
+    return sum / #t
+end
+
+
+function var(t, m)
+    m = m or mean(t)
+
+    local sum = 0
+    for _, val in pairs(t) do
+        sum = sum + (val - m) ^ 2
+    end
+
+    return sum / #t
+end
+
+
+function cross_var(x, y, m_x, m_y)
+    m_x = m_x or mean(x)
+    m_y = m_y or mean(y)
+
+    local sum = 0
+    for i=1, #x do
+        sum = sum + (x[i] - m_x) * (y[i] - m_y)
+    end
+
+    return sum / #x
+end
+
+
+function printCovarianceMatrix(x, y)
+    -- Compute variances
+    local x_mean = mean(x)
+    local y_mean = mean(y)
+
+    local x_var = var(x, x_mean)
+    local y_var = var(y, y_mean)
+    local cross_var = cross_var(x, y, x_mean, y_mean)
+
+    -- Print covariance matrix
+    print("Covariance matrix:")
+    print("|" .. x_var .. " " .. cross_var .. "|")
+    print("|" .. cross_var .. " " .. y_var .. "|")
+end
+
+
+function sysCall_actuation()
     tt = sim.getSimulationTime()
     -- print("actuation hello", tt)
 
@@ -219,7 +278,7 @@ function sysCall_actuation()
             -- Target is to stop the robot (zero speed)
             speedBaseL = 0
             speedBaseR = 0
-        elseif (newStepType == "repeat") then
+        elseif (newStepType == "repeat" and executionCounter < maxExecutions) then
             -- Drop a 'dummy' as a marker of the robot's final position
             newDummy = sim.createDummy(0.05)
             linearPosition = sim.getObjectPosition(robotBase,-1)
@@ -236,6 +295,18 @@ function sysCall_actuation()
             -- Reset state machine and graph update interval counter
             stepCounter = 0
             graphSteps = 0
+
+            executionCounter = executionCounter + 1
+
+            -- Save final x, y coordinates
+            pos = sim.getObjectPosition(newDummy, -1)
+            final_x_positions[executionCounter] = pos[1]
+            final_y_positions[executionCounter] = pos[2]
+        elseif (newStepType == "repeat" and executionCounter == maxExecutions) then
+            -- Print covariance matrix
+            printCovarianceMatrix(final_x_positions, final_y_positions)
+        else
+            print("ERROR: Invalid step type")
         end
     end
 
