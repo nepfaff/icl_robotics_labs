@@ -84,7 +84,7 @@ function sysCall_init()
     robotStartMatrix=sim.getObjectMatrix(robotBase,-1)
 
     -- Usual rotation rate for wheels (radians per second)
-    speedBase = 5
+    speedBase = 1
 
     -- Which step are we in?
     -- 0 is a dummy value which is immediately completed
@@ -127,7 +127,7 @@ function sysCall_init()
 
     -- To calibrate
     motorAnglePerMetre = 24.5
-    motorAnglePerRadian = 3.0085
+    motorAnglePerRadian = 13
 end
 
 
