@@ -4,6 +4,7 @@ function gaussian (mean, variance)
             math.cos(2 * math.pi * math.random()) + mean
 end
 
+
 function createRandomBumpyFloor()
     print ("Generating new random bumpy floor.")
     sim.setThreadAutomaticSwitch(false)
@@ -31,13 +32,11 @@ function createRandomBumpyFloor()
 end
 
 
-
 -- This function is executed exactly once when the scene is initialised
 function sysCall_init()
-
     tt = sim.getSimulationTime()
     print("Init hello", tt)
-          
+
     robotBase=sim.getObjectHandle(sim.handle_self) -- robot handle
     leftMotor=sim.getObjectHandle("leftMotor") -- Handle of the left motor
     rightMotor=sim.getObjectHandle("rightMotor") -- Handle of the right motor
@@ -47,57 +46,53 @@ function sysCall_init()
     -- Create bumpy floor for robot to drive on
     createRandomBumpyFloor()
 
-   
     -- Usual rotation rate for wheels (radians per second)
     speedBase = 5
     speedBaseL = 0
     speedBaseR = 0
-    
+
     -- Which step are we in?
     -- 0 is a dummy value which is immediately completed
     stepCounter = 0
     stepCompletedFlag = false
-    stepList = {}
-        
 
+    -- Sequential state machine
+    stepList = {}
     stepList[1] = {"forward", 1.0}
     stepList[2] = {"stop"}
     stepList[3] = {"turn", math.rad(90)}
     stepList[4] = {"stop"}
     stepList[5] = {"repeat"}
 
-
- 
- 
     -- Create and initialise arrays for particles, and display them with dummies
     xArray = {}
     yArray = {}
     thetaArray = {}
     weightArray = {}
     dummyArray = {}
-    N = 100
-    for i=1, N do
+    numberOfParticles = 100
+    -- Initialise all particles to origin with uniform distribution
+    -- We have certainty about starting position
+    for i=1, numberOfParticles do
         xArray[i] = 0
         yArray[i] = 0
         thetaArray[i] = 0
-        weightArray[i] = 1/N
-        dummyArray[i] = sim.createDummy(0.05)
+        weightArray[i] = 1/numberOfParticles
+        dummyArray[i] = sim.createDummy(0.05) -- Returns integer object handle
+
+        -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
         sim.setObjectPosition(dummyArray[i], -1, {0,0,0})
+        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
         sim.setObjectOrientation(dummyArray[i], -1, {0,0,0})
     end
-
- 
 
     -- Target positions for joints
     motorAngleTargetL = 0.0
     motorAngleTargetR = 0.0
 
-     -- To calibrate
+     -- Motor angles in radians per unit (to calibrate)
     motorAnglePerMetre = 24.8
     motorAnglePerRadian = 3.05
- 
-
-    noisyDistance = 0
 end
 
 function sysCall_sensing()
@@ -105,10 +100,8 @@ function sysCall_sensing()
 end
 
 
-
+-- How far are the left and right motors from their targets? Find the maximum
 function getMaxMotorAngleFromTarget(posL, posR)
-
-    -- How far are the left and right motors from their targets? Find the maximum
     maxAngle = 0
     if (speedBaseL > 0) then
         remaining = motorAngleTargetL - posL
@@ -139,23 +132,17 @@ function getMaxMotorAngleFromTarget(posL, posR)
 end
 
 
-
 function sysCall_actuation() 
-    tt = sim.getSimulationTime()
-    -- print("actuation hello", tt)
-    
+    tt = sim.getSimulationTime() 
 
     -- Get and plot current angles of motor joints
     posL = sim.getJointPosition(leftMotor)
     posR = sim.getJointPosition(rightMotor)
-    
-
 
     -- Start new step?
     if (stepCompletedFlag == true or stepCounter == 0) then
         stepCounter = stepCounter + 1
         stepCompletedFlag = false
-
 
         newStepType = stepList[stepCounter][1]
 
@@ -182,18 +169,21 @@ function sysCall_actuation()
         end
     end
 
-
     -- Handle current ongoing step
     stepType = stepList[stepCounter][1]
 
     if (stepType == "turn") then
+        -- Set wheel speed based on turn direction
         if (stepList[stepCounter][2] >= 0) then
+            -- Left turn
             speedBaseL = -speedBase
             speedBaseR = speedBase
         else
+            -- Right turn
             speedBaseL = speedBase
             speedBaseR = -speedBase
         end
+
         motorAngleFromTarget = getMaxMotorAngleFromTarget(posL, posR)
         -- Slow down when close
         if (motorAngleFromTarget < 3) then
@@ -201,12 +191,15 @@ function sysCall_actuation()
             speedBaseL = speedBaseL * speedScaling
             speedBaseR = speedBaseR * speedScaling
         end
+        -- Determine if we have reached the current step's goal
         if (motorAngleFromTarget == 0) then
             stepCompletedFlag = true
         end
     elseif (stepType == "forward") then
+        -- Set wheel speed
         speedBaseL = speedBase
         speedBaseR = speedBase
+
         motorAngleFromTarget = getMaxMotorAngleFromTarget(posL, posR)
         -- Slow down when close
         if (motorAngleFromTarget < 3) then
@@ -214,19 +207,19 @@ function sysCall_actuation()
             speedBaseL = speedBaseL * speedScaling
             speedBaseR = speedBaseR * speedScaling
         end
+        -- Determine if we have reached the current step's goal
         if (motorAngleFromTarget == 0) then
             stepCompletedFlag = true
         end
     elseif (stepType == "stop") then
+        -- Set speed to zero
         speedBaseL = 0
         speedBaseR = 0
 
         -- Check to see if the robot is stationary to within a small threshold
-        linearVelocity,angularVelocity=sim.getVelocity(robotBase)
+        linearVelocity, angularVelocity = sim.getVelocity(robotBase)
         vLin = math.sqrt(linearVelocity[1]^2 + linearVelocity[2]^2 + linearVelocity[3]^2)
         vAng = math.sqrt(angularVelocity[1]^2 + angularVelocity[2]^2 + angularVelocity[3]^2)
-        --print ("stop", linearVelocity, vLin, vAng)
-
         if (vLin < 0.001 and vAng < 0.01) then
             stepCompletedFlag = true
         end
@@ -234,8 +227,7 @@ function sysCall_actuation()
 
     -- Set the motor velocities for the current step
     sim.setJointTargetVelocity(leftMotor,speedBaseL)
-    sim.setJointTargetVelocity(rightMotor,speedBaseR)        
-
+    sim.setJointTargetVelocity(rightMotor,speedBaseR)
 end
 
 function sysCall_cleanup()
