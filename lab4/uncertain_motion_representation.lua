@@ -76,7 +76,12 @@ function sysCall_init()
     for i=1, numberOfParticles do
         xArray[i] = 0
         yArray[i] = 0
-        thetaArray[i] = 0
+        -- ynew = 0 + (D+e)sin(0) will always give 0
+        -- This is unrealistic but can be mitigated by initialising theta to a tiny
+        -- bit of zero mean noise rather than to 0
+        -- This would not be a problem in realistic scenarios as you could never be
+        -- a 100% certain that you positioned your robot with an exact orientation
+        thetaArray[i] = gaussian(0, 0.002)
         weightArray[i] = 1/numberOfParticles
         dummyArray[i] = sim.createDummy(0.05) -- Returns integer object handle
 
@@ -93,10 +98,56 @@ function sysCall_init()
      -- Motor angles in radians per unit (to calibrate)
     motorAnglePerMetre = 24.8
     motorAnglePerRadian = 3.05
+
+    -- Zero mean Gaussian noise variance in meter/radians (to calibrate)
+    -- Determined for a one meter distance
+    straightLineXYVariance = 0.0005
+    straightLineThetaVariance = 0.0005
+    -- Zero mean Gaussian noise variance in radians (to calibrate)
+    -- Determined for a one radian rotation
+    rotationThetaVariance = 0.003
 end
 
 function sysCall_sensing()
     
+end
+
+
+-- Performs a particle motion prediction update for straight line motion
+function updateParticlesAfterStraightLineMotion(metersMovedSinceLastUpdate)
+    for i=1, numberOfParticles do
+        -- Scale variances appropriately (variance is additive and determined for one meter)
+        local distanceNoise = gaussian(0, straightLineXYVariance * metersMovedSinceLastUpdate)
+        local rotationNoise = gaussian(0, straightLineThetaVariance * metersMovedSinceLastUpdate)
+
+        local noisyDistance = metersMovedSinceLastUpdate + distanceNoise
+        local noisyDistanceX = noisyDistance * math.cos(thetaArray[i])
+        local noisyDistanceY = noisyDistance * math.sin(thetaArray[i])
+
+        xArray[i] = xArray[i] + noisyDistanceX
+        yArray[i] = yArray[i] + noisyDistanceY
+        thetaArray[i] = thetaArray[i] + rotationNoise
+
+        -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
+        sim.setObjectPosition(dummyArray[i], -1, {xArray[i],yArray[i],0})
+        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
+        sim.setObjectOrientation(dummyArray[i], -1, {0,0,thetaArray[i]})
+    end
+end
+
+
+-- Performs a particle motion prediction update for pure rotation (rotation on the spot)
+function updateParticlesAfterPureRotation(radiansRotatedSinceLastUpdate)
+    for i=1, numberOfParticles do
+        -- Scale variance appropriately (variance is additive and determined for one radian)
+        local rotationNoise = gaussian(0, rotationThetaVariance * radiansRotatedSinceLastUpdate)
+
+        local noisyRoationRadians = radiansRotatedSinceLastUpdate + rotationNoise
+        thetaArray[i] = thetaArray[i] + noisyRoationRadians
+
+        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
+        sim.setObjectOrientation(dummyArray[i], -1, {0,0,thetaArray[i]})
+    end
 end
 
 
@@ -194,6 +245,10 @@ function sysCall_actuation()
         -- Determine if we have reached the current step's goal
         if (motorAngleFromTarget == 0) then
             stepCompletedFlag = true
+
+            -- Update particles
+            rotationAmountRadians = stepList[stepCounter][2]
+            updateParticlesAfterPureRotation(rotationAmountRadians)
         end
     elseif (stepType == "forward") then
         -- Set wheel speed
@@ -210,6 +265,10 @@ function sysCall_actuation()
         -- Determine if we have reached the current step's goal
         if (motorAngleFromTarget == 0) then
             stepCompletedFlag = true
+
+            -- Update particles
+            forwardAmountMeters = stepList[stepCounter][2]
+            updateParticlesAfterStraightLineMotion(forwardAmountMeters)
         end
     elseif (stepType == "stop") then
         -- Set speed to zero
