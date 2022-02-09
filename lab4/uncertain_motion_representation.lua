@@ -140,7 +140,7 @@ end
 function updateParticlesAfterPureRotation(radiansRotatedSinceLastUpdate)
     for i=1, numberOfParticles do
         -- Scale variance appropriately (variance is additive and determined for one radian)
-        local rotationNoise = gaussian(0, rotationThetaVariance * radiansRotatedSinceLastUpdate)
+        local rotationNoise = gaussian(0, rotationThetaVariance * math.abs(radiansRotatedSinceLastUpdate))
 
         local noisyRoationRadians = radiansRotatedSinceLastUpdate + rotationNoise
         thetaArray[i] = thetaArray[i] + noisyRoationRadians
