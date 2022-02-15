@@ -283,7 +283,7 @@ function calculateLikelihood(x, y, theta, z)
     for Ax, Ay, Bx, By in walls do
         local distanceToWall = ((By - Ay)*(Ax - x) - (Bx - Ax)*(Ay - y)) / ((By - Ay)*math.cos(theta) - (By - Ay)*math.sin(theta))
 
-        if (distanceToWall < m) then
+        if (distanceToWall < m and distanceToWall >= 0) then
             -- Check if the sonar should hit between the endpoint limits of the wall
             local intersectX = x + distanceToWall * math.cos(theta)
             local intersectY = y + distanceToWall * math.sin(theta)
