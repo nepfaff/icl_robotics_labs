@@ -209,6 +209,16 @@ function sysCall_sensing()
 end
 
 
+function updateParticleVisualisation()
+    for i=1, numberOfParticles do
+       -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
+        sim.setObjectPosition(dummyArray[i], -1, {xArray[i],yArray[i],0.0})
+        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
+        sim.setObjectOrientation(dummyArray[i], -1, {0.0,0.0,thetaArray[i]})
+    end
+end
+
+
 -- Performs a particle motion prediction update for straight line motion.
 -- Does not do anything if 'metersMovedSinceLastUpdate' is zero (robot did not do anything).
 function updateParticlesAfterStraightLineMotion(metersMovedSinceLastUpdate)
@@ -229,12 +239,9 @@ function updateParticlesAfterStraightLineMotion(metersMovedSinceLastUpdate)
         xArray[i] = xArray[i] + noisyDistanceX
         yArray[i] = yArray[i] + noisyDistanceY
         thetaArray[i] = thetaArray[i] + rotationNoise
-
-        -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
-        sim.setObjectPosition(dummyArray[i], -1, {xArray[i],yArray[i],0.0})
-        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
-        sim.setObjectOrientation(dummyArray[i], -1, {0.0,0.0,thetaArray[i]})
     end
+
+    updateParticleVisualisation()
 
     print("Updated particles after straight line motion")
 end
@@ -254,10 +261,9 @@ function updateParticlesAfterPureRotation(radiansRotatedSinceLastUpdate)
 
         local noisyRoationRadians = radiansRotatedSinceLastUpdate + rotationNoise
         thetaArray[i] = thetaArray[i] + noisyRoationRadians
-
-        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
-        sim.setObjectOrientation(dummyArray[i], -1, {0.0,0.0,thetaArray[i]})
     end
+
+    updateParticleVisualisation()
 
     print("Updated particles after pure rotation")
 end
@@ -271,7 +277,11 @@ end
 
 -- Returns true if the point (x, y) lies on the line between two points (Ax, Ay) and (Bx, By).
 function isPointOnLineBetweenTwoPoints(x, y, Ax, Ay, Bx, By)
-    return euclideanDistance(Ax, Ay, x, y) + euclideanDistance(x, y, Bx, By) == euclideanDistance(Ax, Ay, Bx, By)
+    -- TODO: Replace this with more robust metric. Commonly does not return true when it should
+    -- due uncertainty. Try to solve this using the dot product: https://stackoverflow.com/questions/18171840/check-if-a-point-is-between-two-points
+
+    local distanceMargin = 0.05
+    return euclideanDistance(Ax, Ay, x, y) + euclideanDistance(x, y, Bx, By) - euclideanDistance(Ax, Ay, Bx, By) < distanceMargin
 end
 
 
@@ -280,7 +290,12 @@ end
 function calculateLikelihood(x, y, theta, z)
     -- Compute expected depth measurement m, assuming robot pose (x, y, theta)
     local m = math.huge
-    for Ax, Ay, Bx, By in walls do
+    for _, wall in ipairs(walls) do
+        Ax = wall[1]
+        Ay = wall[2]
+        Bx = wall[3]
+        By = wall[4]
+
         local distanceToWall = ((By - Ay)*(Ax - x) - (Bx - Ax)*(Ay - y)) / ((By - Ay)*math.cos(theta) - (By - Ay)*math.sin(theta))
 
         if (distanceToWall < m and distanceToWall >= 0) then
@@ -297,13 +312,84 @@ function calculateLikelihood(x, y, theta, z)
 
     -- Compute likelihood based on difference between m and z
     local likelihood = math.exp(- (z - m)^2 / (2*sensorVariance))
+
+    if (m == math.huge) then
+        print("NO ACTUAL DISTANCE TO WALL FOUND: Assume likelihood is one")
+        likelihood = 1.0
+    end
+
     return likelihood
+end
+
+
+-- Returns the sum of all elements in an array.
+function sum(array)
+    local sum = 0
+    for i=1, #array do
+        sum = sum + array[i]
+    end
+
+    return sum
+end
+
+
+-- Perform particle filter normalisation step to ensure that weights add up to 1.
+function normaliseParticleWeights()
+    local weightSum = sum(weightArray)
+    print(weightSum)
+    for i=1, #weightArray do
+        weightArray[i] = weightArray[i] / weightSum
+    end
+end
+
+
+-- Perform particle resampling using biased roulette wheel method.
+function resampleParticles()
+    local cumulativeWeightArray = {weightArray[1]}
+    for i=2, numberOfParticles do
+        cumulativeWeightArray[i] = cumulativeWeightArray[i-1] + weightArray[i]
+    end
+
+    local newXArray = {}
+    local newYArray = {}
+    local newThetaArray = {}
+    for i=1, numberOfParticles do
+        local r = math.random() -- Random number in range [0,1]
+        for j=1, #cumulativeWeightArray do
+            if (r <= cumulativeWeightArray[j]) then
+                newXArray[i] = xArray[j]
+                newYArray[i] = yArray[j]
+                newThetaArray[i] = thetaArray[j]
+                break
+            end
+        end
+    end
+
+    xArray = newXArray
+    yArray = newYArray
+    thetaArray = newThetaArray
+
+    for i=1, numberOfParticles do
+        weightArray[i] = 1 / numberOfParticles
+    end
 end
 
 
 -- Perform particle measurement update
 function updateParticlesAfterMeasurement(distanceMeasurement)
-    -- TODO: Continue lab handout 3.2
+    -- Measurement update
+    for i=1, numberOfParticles do
+        local likelihood = calculateLikelihood(xArray[i], yArray[i], thetaArray[i], distanceMeasurement)
+        weightArray[i] = weightArray[i] * likelihood
+    end
+
+    normaliseParticleWeights()
+
+    resampleParticles()
+
+    updateParticleVisualisation()
+
+    print("Updated particles after measurement update, normalisation, and resampling")
 end
 
 
@@ -504,6 +590,7 @@ function sysCall_actuation()
                 noisyDistance = cleanDistance + gaussian(0.0, sensorVariance)
                 --print ("Depth sensor reading ", noisyDistance)
 
+                sleep(0.5) -- Wait so that we can differentiate motion and measurement updates in simulation
                 updateParticlesAfterMeasurement(noisyDistance)
             end
         end
@@ -513,6 +600,13 @@ function sysCall_actuation()
     sim.setJointTargetVelocity(leftMotor,speedBaseL)
     sim.setJointTargetVelocity(rightMotor,speedBaseR)
 end
+
+
+function sleep(seconds)
+    local t0 = os.clock()
+    while os.clock() - t0 <= seconds do end
+end
+
 
 function sysCall_cleanup()
     --simUI.destroy(ui)
