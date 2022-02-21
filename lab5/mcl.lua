@@ -277,11 +277,8 @@ end
 
 -- Returns true if the point (x, y) lies on the line between two points (Ax, Ay) and (Bx, By).
 function isPointOnLineBetweenTwoPoints(x, y, Ax, Ay, Bx, By)
-    -- TODO: Replace this with more robust metric. Commonly does not return true when it should
-    -- due uncertainty. Try to solve this using the dot product: https://stackoverflow.com/questions/18171840/check-if-a-point-is-between-two-points
-
-    local distanceMargin = 0.01
-    return euclideanDistance(Ax, Ay, x, y) + euclideanDistance(x, y, Bx, By) - euclideanDistance(Ax, Ay, Bx, By) < distanceMargin
+    local distanceMargin = 0.01 -- Needed for floating point errors
+    return math.abs(euclideanDistance(Ax, Ay, x, y) + euclideanDistance(x, y, Bx, By) - euclideanDistance(Ax, Ay, Bx, By)) < distanceMargin
 end
 
 
@@ -336,7 +333,6 @@ end
 -- Perform particle filter normalisation step to ensure that weights add up to 1.
 function normaliseParticleWeights()
     local weightSum = sum(weightArray)
-    print(weightSum)
     for i=1, #weightArray do
         weightArray[i] = weightArray[i] / weightSum
     end
