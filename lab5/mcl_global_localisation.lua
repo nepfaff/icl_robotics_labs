@@ -103,7 +103,7 @@ function sysCall_init()
 
     -- Which step are we in?
     -- 0 is a dummy value which is immediately completed
-    stepCounter = 0
+    stepCounter = 6 -- Start with measurement step
     stepCompletedFlag = false
 
     -- Sequential state machine (executed for each waypoint)
@@ -149,9 +149,13 @@ function sysCall_init()
 
     -- Determines the difference between consequtive angles that the turret
     -- is rotated to during the measurement step (rotated -pi to pi)
-    turretAngleDeltaRad = math.rad(10)
+    turretAngleDeltaRad = math.rad(15)
     turretAngleTarget = -(math.pi - 0.01)
     sim.setJointTargetPosition(turretMotor, turretAngleTarget)
+
+    -- Record a series of measurements to update particles together (only need to resample once)
+    distanceMeasurements = {}
+    turretAngleRads = {}
 
     -- Create and initialise arrays for particles, and display them with dummies
     xArray = {}
@@ -159,26 +163,22 @@ function sysCall_init()
     thetaArray = {}
     weightArray = {}
     dummyArray = {}
-    numberOfParticles = 100
-    -- Initialise all particles to origin with uniform distribution
-    -- We have certainty about starting position
-    for i=1, numberOfParticles do
-        xArray[i] = 0
-        yArray[i] = 0
-        -- ynew = 0 + (D+e)sin(0) will always give 0
-        -- This is unrealistic but can be mitigated by initialising theta to a tiny
-        -- bit of zero mean noise rather than to 0
-        -- This would not be a problem in realistic scenarios as you could never be
-        -- a 100% certain that you positioned your robot with an exact orientation
-        thetaArray[i] = gaussian(0, 0.002)
-        weightArray[i] = 1.0/numberOfParticles
-        dummyArray[i] = sim.createDummy(0.05) -- Returns integer object handle
+    numberOfParticles = 10000
+    numberOfParticleSecondRound = 100 -- Only need lots of particles to determine initial location
+    numberOfDummes = numberOfParticleSecondRound
 
-        -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
-        sim.setObjectPosition(dummyArray[i], -1, {xArray[i],yArray[i],0})
-        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
-        sim.setObjectOrientation(dummyArray[i], -1, {0,0,thetaArray[i]})
+    -- Initialise all particles randomly with uniform distribution
+    for i=1, numberOfParticles do
+        xArray[i] = 5 * math.random() - 2.5 -- Random in range [-2.5, 2.5]
+        yArray[i] = 5 * math.random() - 2.5 -- Random in range [-2.5, 2.5]
+        thetaArray[i] = 2*math.pi * math.random() - math.pi -- Random in range [-pi, pi]
+        weightArray[i] = 1.0/numberOfParticles
+
+        if i <= numberOfDummes then
+            dummyArray[i] = sim.createDummy(0.05) -- Returns integer object handle
+        end
     end
+    updateParticleVisualisation()
 
     -- Target movements for reaching the current waypoint
     waypointRotationRadians = 0.0
@@ -196,6 +196,8 @@ function sysCall_init()
 
     sensorStandardDeviation = 0.1
     sensorVariance = sensorStandardDeviation^2
+    sensorNoiseConstant = 0.0001 -- Makes filter less aggressive in killing of particles
+
     noisyDistance = 0
 
      -- Motor angles in radians per unit (to calibrate)
@@ -217,11 +219,16 @@ end
 
 
 function updateParticleVisualisation()
+    local j = 1
     for i=1, numberOfParticles do
-       -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
-        sim.setObjectPosition(dummyArray[i], -1, {xArray[i],yArray[i],0.0})
-        -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
-        sim.setObjectOrientation(dummyArray[i], -1, {0.0,0.0,thetaArray[i]})
+        if i % (numberOfParticles / numberOfDummes) == 0 then
+           -- Args: object handle, reference frame (-1 = absolute position), coordinates (x,y,z)
+            sim.setObjectPosition(dummyArray[j], -1, {xArray[i],yArray[i],0.0})
+            -- Args: object handle, reference frame (-1 = absolute position), euler angles (alpha, beta, gamma)
+            sim.setObjectOrientation(dummyArray[j], -1, {0.0,0.0,thetaArray[i]})
+
+            j = j + 1
+        end
     end
 end
 
@@ -315,7 +322,7 @@ function calculateLikelihood(x, y, theta, z)
     end
 
     -- Compute likelihood based on difference between m and z
-    local likelihood = math.exp(- (z - m)^2 / (2*sensorVariance))
+    local likelihood = math.exp(- (z - m)^2 / (2*sensorVariance)) + sensorNoiseConstant
 
     if (m == math.huge) then
         print("NO ACTUAL DISTANCE TO WALL FOUND: Assume likelihood is one")
@@ -340,6 +347,10 @@ end
 -- Perform particle filter normalisation step to ensure that weights add up to 1.
 function normaliseParticleWeights()
     local weightSum = sum(weightArray)
+    if weightSum == 0 then
+        print("ERROR in normaliseParticleWeights: weightSum is zero")
+    end
+
     for i=1, #weightArray do
         weightArray[i] = weightArray[i] / weightSum
     end
@@ -351,6 +362,13 @@ function resampleParticles()
     local cumulativeWeightArray = {weightArray[1]}
     for i=2, numberOfParticles do
         cumulativeWeightArray[i] = cumulativeWeightArray[i-1] + weightArray[i]
+    end
+
+    -- Number of particles of first round differs from remaining rounds
+    if numberOfParticles ~= numberOfParticleSecondRound then
+        numberOfParticles = numberOfParticleSecondRound
+
+        weightArray = {}
     end
 
     local newXArray = {}
@@ -379,12 +397,14 @@ end
 
 
 -- Perform particle measurement update
-function updateParticlesAfterMeasurement(distanceMeasurement, turretAngleRad)
-    -- Measurement update
+function updateParticlesAfterMeasurement(distanceMeasurements, turretAngleRads)
+    -- Combined measurement update
     for i=1, numberOfParticles do
-        -- Account for turret rotation by adding turret angle to the particle's angle
-        local likelihood = calculateLikelihood(xArray[i], yArray[i], thetaArray[i] + turretAngleRad, distanceMeasurement)
-        weightArray[i] = weightArray[i] * likelihood
+        for j=1, #distanceMeasurements do
+             -- Account for turret rotation by adding turret angle to the particle's angle
+            local likelihood = calculateLikelihood(xArray[i], yArray[i], thetaArray[i] + turretAngleRads[j], distanceMeasurements[j])
+            weightArray[i] = weightArray[i] * likelihood
+        end
     end
 
     normaliseParticleWeights()
@@ -599,12 +619,18 @@ function sysCall_actuation()
             if result > 0 then
                 noisyDistance = cleanDistance + gaussian(0.0, sensorVariance)
 
-                updateParticlesAfterMeasurement(noisyDistance, turretAngleTarget)
+                distanceMeasurements[#distanceMeasurements+1] = noisyDistance
+                turretAngleRads[#turretAngleRads+1] = turretAngleTarget
             end
 
             turretAngleTarget = turretAngleTarget + turretAngleDeltaRad
         elseif turretAngleTarget + turretAngleDeltaRad >= (math.pi - 0.01) then
             -- Finished all measurements
+
+            -- Combined measurement update
+            updateParticlesAfterMeasurement(distanceMeasurements, turretAngleRads)
+            distanceMeasurements = {}
+            turretAngleRads = {}
 
             -- Reset turret
             turretAngleTarget = -(math.pi - 0.01)
