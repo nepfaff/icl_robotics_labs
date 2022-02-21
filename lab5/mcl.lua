@@ -197,11 +197,11 @@ function sysCall_init()
 
     -- Zero mean Gaussian noise variance in meter/radians (to calibrate)
     -- Determined for a one meter distance
-    straightLineXYVariance = 0.0005
-    straightLineThetaVariance = 0.0005
+    straightLineXYVariance = 0.0010
+    straightLineThetaVariance = 0.0010
     -- Zero mean Gaussian noise variance in radians (to calibrate)
     -- Determined for a one radian rotation
-    rotationThetaVariance = 0.003
+    rotationThetaVariance = 0.004
 end
 
 function sysCall_sensing()
