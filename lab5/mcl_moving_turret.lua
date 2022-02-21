@@ -153,6 +153,10 @@ function sysCall_init()
     turretAngleTarget = -(math.pi - 0.01)
     sim.setJointTargetPosition(turretMotor, turretAngleTarget)
 
+    -- Record a series of measurements to update particles together (only need to resample once)
+    distanceMeasurements = {}
+    turretAngleRads = {}
+
     -- Create and initialise arrays for particles, and display them with dummies
     xArray = {}
     yArray = {}
@@ -379,12 +383,14 @@ end
 
 
 -- Perform particle measurement update
-function updateParticlesAfterMeasurement(distanceMeasurement, turretAngleRad)
-    -- Measurement update
+function updateParticlesAfterMeasurement(distanceMeasurements, turretAngleRads)
+    -- Combined measurement update
     for i=1, numberOfParticles do
-        -- Account for turret rotation by adding turret angle to the particle's angle
-        local likelihood = calculateLikelihood(xArray[i], yArray[i], thetaArray[i] + turretAngleRad, distanceMeasurement)
-        weightArray[i] = weightArray[i] * likelihood
+        for j=1, #distanceMeasurements do
+             -- Account for turret rotation by adding turret angle to the particle's angle
+            local likelihood = calculateLikelihood(xArray[i], yArray[i], thetaArray[i] + turretAngleRads[j], distanceMeasurements[j])
+            weightArray[i] = weightArray[i] * likelihood
+        end
     end
 
     normaliseParticleWeights()
@@ -599,12 +605,18 @@ function sysCall_actuation()
             if result > 0 then
                 noisyDistance = cleanDistance + gaussian(0.0, sensorVariance)
 
-                updateParticlesAfterMeasurement(noisyDistance, turretAngleTarget)
+                distanceMeasurements[#distanceMeasurements+1] = noisyDistance
+                turretAngleRads[#turretAngleRads+1] = turretAngleTarget
             end
 
             turretAngleTarget = turretAngleTarget + turretAngleDeltaRad
         elseif turretAngleTarget + turretAngleDeltaRad >= (math.pi - 0.01) then
             -- Finished all measurements
+
+            -- Combined measurement update
+            updateParticlesAfterMeasurement(distanceMeasurements, turretAngleRads)
+            distanceMeasurements = {}
+            turretAngleRads = {}
 
             -- Reset turret
             turretAngleTarget = -(math.pi - 0.01)
