@@ -280,7 +280,7 @@ function isPointOnLineBetweenTwoPoints(x, y, Ax, Ay, Bx, By)
     -- TODO: Replace this with more robust metric. Commonly does not return true when it should
     -- due uncertainty. Try to solve this using the dot product: https://stackoverflow.com/questions/18171840/check-if-a-point-is-between-two-points
 
-    local distanceMargin = 0.05
+    local distanceMargin = 0.01
     return euclideanDistance(Ax, Ay, x, y) + euclideanDistance(x, y, Bx, By) - euclideanDistance(Ax, Ay, Bx, By) < distanceMargin
 end
 
@@ -296,7 +296,7 @@ function calculateLikelihood(x, y, theta, z)
         Bx = wall[3]
         By = wall[4]
 
-        local distanceToWall = ((By - Ay)*(Ax - x) - (Bx - Ax)*(Ay - y)) / ((By - Ay)*math.cos(theta) - (By - Ay)*math.sin(theta))
+        local distanceToWall = ((By - Ay)*(Ax - x) - (Bx - Ax)*(Ay - y)) / ((By - Ay)*math.cos(theta) - (Bx - Ax)*math.sin(theta))
 
         if (distanceToWall < m and distanceToWall >= 0) then
             -- Check if the sonar should hit between the endpoint limits of the wall
@@ -590,7 +590,7 @@ function sysCall_actuation()
                 noisyDistance = cleanDistance + gaussian(0.0, sensorVariance)
                 --print ("Depth sensor reading ", noisyDistance)
 
-                sleep(0.5) -- Wait so that we can differentiate motion and measurement updates in simulation
+                --sleep(1) -- Wait so that we can differentiate motion and measurement updates in simulation
                 updateParticlesAfterMeasurement(noisyDistance)
             end
         end
