@@ -246,42 +246,47 @@ function sysCall_init()
     stepList = {}
     stepList[1] = {"read_waypoint"}
     stepList[2] = {"turn"}
-    stepList[3] = {"stop"}
+    stepList[3] = {"stop"} -- TODO: Experiment with removing stop steps
     stepList[4] = {"forward"}
     stepList[5] = {"stop"}
     stepList[6] = {"measurement"}
     stepList[7] = {"repeat"}
 
     -- Waypoints
-    N_WAYPOINTS = 26
-    currentWaypoint = 1
+    N_WAYPOINTS = 22
+    startingWaypoint = -1 -- Waypoint at which we start and end (determined after first measurement)
+    currentWaypoint = -1
     waypoints = {}
-    waypoints[1] = {0.5,0}
-    waypoints[2] = {1,0}
-    waypoints[3] = {1,0.5}
-    waypoints[4] = {1,1}
-    waypoints[5] = {1,1.5}
-    waypoints[6] = {1,2}
-    waypoints[7] = {0.5,2}
-    waypoints[8] = {0,2}
-    waypoints[9] = {-0.5,2}
-    waypoints[10] = {-1,2}
-    waypoints[11] = {-1,1.5}
-    waypoints[12] = {-1,1}
-    waypoints[13] = {-1.5,1}
-    waypoints[14] = {-2,1}
-    waypoints[15] = {-2,0.5}
-    waypoints[16] = {-2,0}
-    waypoints[17] = {-2,-0.5}
-    waypoints[18] = {-1.5,-1}
-    waypoints[19] = {-1,-1.5}
-    waypoints[20] = {-0.5,-1.5}
-    waypoints[21] = {0,-1.5}
-    waypoints[22] = {0.5,-1.5}
-    waypoints[23] = {1,-1.5} 
-    waypoints[24] = {1,-1}
-    waypoints[25] = {0.5,-0.5}
-    waypoints[26] = {0,0}
+    waypoints[1] = {2,-2} -- Bottom right goal
+    waypoints[2] = {2,-1}
+    waypoints[3] = {2,0}
+    waypoints[4] = {2,1}
+    waypoints[5] = {2,2} -- Top right goal
+    waypoints[6] = {1,1}
+    waypoints[7] = {0,0} -- Centre goal
+    waypoints[8] = {1.25,1.25}
+    waypoints[9] = {0,1.25}
+    waypoints[10] = {-1,1.25}
+    waypoints[11] = {-2,1.25}
+    waypoints[12] = {-2,2} -- Top left goal
+    waypoints[13] = {-1,1}
+    waypoints[14] = {-2,0}
+    waypoints[15] = {-2,-1} -- Bottom left goal
+    waypoints[16] = {-0.75,-1.25}
+    waypoints[17] = {-1.5,-1.75}
+    waypoints[18] = {-2.25,-2.25}
+    waypoints[19] = {-1.5,-2.25}
+    waypoints[20] = {-0.5,-2.25}
+    waypoints[21] = {0.5,-2.25}
+    waypoints[22] = {1.5,-2.25}
+
+    -- Used to find waypoint associated with a goal
+    goalToWaypointMapping = {}
+    goalToWaypointMapping[1] = 7
+    goalToWaypointMapping[2] = 12
+    goalToWaypointMapping[3] = 1
+    goalToWaypointMapping[4] = 5
+    goalToWaypointMapping[5] = 15
 
     -- Determines the difference between consequtive angles that the turret
     -- is rotated to during the measurement step (rotated -pi to pi)
@@ -341,7 +346,6 @@ function sysCall_init()
 end
 
 function sysCall_sensing()
-    
 end
 
 
@@ -622,6 +626,35 @@ function getMaxMotorAngleFromTarget(posL, posR)
 end
 
 
+function getClosestGoalFromCoordinates(x, y)
+    local closestGoal = -1
+    local minDistance = math.huge
+
+    for i=1, N_GOALS do
+        local distanceToGoal = euclideanDistance(goals[i][1], goals[i][2], x, y)
+        if distanceToGoal < minDistance then
+            minDistance = distanceToGoal
+            closestGoal = i
+        end
+    end
+
+    return closestGoal
+end
+
+
+function pointEstimateX()
+    return weighted_sum(xArray, weightArray)
+end
+
+function pointEstimateY()
+    return weighted_sum(yArray, weightArray)
+end
+
+function pointEstimateTheta()
+    return weighted_sum(thetaArray, weightArray)
+end
+
+
 function sysCall_actuation() 
     tt = sim.getSimulationTime() 
 
@@ -641,7 +674,15 @@ function sysCall_actuation()
             stepCounter = 1
             newStepType = stepList[stepCounter][1]
 
-            if (currentWaypoint == N_WAYPOINTS) then
+            if (currentWaypoint == startingWaypoint) then
+                -- Reached destination
+                print("DESTINATION REACHED")
+                return
+            elseif (currentWaypoint == startingWaypoint + 1) then
+                -- Just started, don't increment yet
+            elseif (currentWaypoint == goalToWaypointMapping[1]) then
+                -- TODO: Call reachedGoal() method and same for all other possible goals
+            elseif (currentWaypoint == N_WAYPOINTS) then
                 currentWaypoint = 1
             else
                 currentWaypoint = currentWaypoint + 1
@@ -658,9 +699,9 @@ function sysCall_actuation()
 
             -- Set new movement targets to reach the new waypoint
             -- All calculations below use units meter and radian
-            local currentX = weighted_sum(xArray, weightArray)
-            local currentY = weighted_sum(yArray, weightArray)
-            local currentTheta = weighted_sum(thetaArray, weightArray)
+            local currentX = pointEstimateX()
+            local currentY = pointEstimateY()
+            local currentTheta = pointEstimateTheta()
 
             local deltaX = goalX - currentX
             local deltaY = goalY - currentY
@@ -680,8 +721,6 @@ function sysCall_actuation()
             -- Turn step: set new targets
             motorAngleTargetL = posL - waypointRotationRadians * motorAnglePerRadian
             motorAngleTargetR = posR + waypointRotationRadians * motorAnglePerRadian
-        elseif (newStepType == "stop") then
-            print("Stopping")
         elseif (newStepType == "measurement") then
             print("Taking measurements")
         end
@@ -783,6 +822,14 @@ function sysCall_actuation()
             -- Reset turret
             turretAngleTarget = -(math.pi - 0.01)
             sim.setJointTargetPosition(turretMotor, turretAngleTarget)
+
+            -- Check if need to set starting location
+            if startingWaypoint == -1 then
+                local startingGoal = getClosestGoalFromCoordinates(pointEstimateX(), pointEstimateY())
+                startingWaypoint = goalToWaypointMapping[startingGoal]
+                currentWaypoint = startingWaypoint + 1
+                print("Starting waypoint is:", startingWaypoint)
+            end
 
             stepCompletedFlag = true
         else
