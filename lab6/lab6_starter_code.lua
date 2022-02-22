@@ -243,15 +243,12 @@ function sysCall_init()
         print ("Goal" ..tostring(g).. " Gx " ..tostring(goals[g][1]).. " Gy " ..tostring(goals[g][2]))
     end
 
- 
-
     -- Randomise robot start position to one of the goals with random orientation
     startGoal = math.random(N_GOALS)
     startx = goals[startGoal][1]
     starty = goals[startGoal][2]
     startOrientation = math.random() * 2 * math.pi
     setRobotPose(robotBase, startx, starty, startOrientation)
- 
  
     -- These variables are for keeping score, and they will be changed by reachedGoal() --- don't change them directly!
     totalPoints = 0
