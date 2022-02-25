@@ -196,8 +196,8 @@ end
 
 -- This function is executed exactly once when the scene is initialised
 function sysCall_init()
-    tt = sim.getSimulationTime()
-    print("Init hello", tt)
+    startTime = sim.getSimulationTime()
+    print("Start Time", startTime)
 
     robotBase=sim.getObjectHandle(sim.handle_self) -- robot handle
     leftMotor=sim.getObjectHandle("leftMotor") -- Handle of the left motor
@@ -213,6 +213,9 @@ function sysCall_init()
     -- Fill it by parsing the scene in the GUI
     N_GOALS = get_goals()
     -- goals now is an array of arrays with the {Gx, Gy} goal coordinates
+
+    -- Keep track of where we started
+    startingGoal = -1
 
     -- for g=1, N_GOALS do
     --     print ("Goal" ..tostring(g).. " Gx " ..tostring(goals[g][1]).. " Gy " ..tostring(goals[g][2]))
@@ -233,7 +236,7 @@ function sysCall_init()
     end
 
     -- Usual rotation rate for wheels (radians per second)
-    speedBase = 5
+    speedBase = 10 -- Max competition speed is 10 radians/second
     speedBaseL = 0
     speedBaseR = 0
 
@@ -253,46 +256,71 @@ function sysCall_init()
     stepList[7] = {"repeat"}
 
     -- Waypoints
-    N_WAYPOINTS = 22
+    N_WAYPOINTS = 44
     startingWaypoint = -1 -- Waypoint at which we start and end (determined after first measurement)
     currentWaypoint = -1
+    passedStartingWaypoint = false -- Used to differentiate start from end
     waypoints = {}
     waypoints[1] = {2,-2} -- Bottom right goal
-    waypoints[2] = {2,-1}
-    waypoints[3] = {2,0}
-    waypoints[4] = {2,1}
-    waypoints[5] = {2,2} -- Top right goal
-    waypoints[6] = {1,1}
-    waypoints[7] = {0,0} -- Centre goal
-    waypoints[8] = {1.25,1.25}
-    waypoints[9] = {0,1.25}
-    waypoints[10] = {-1,1.25}
-    waypoints[11] = {-2,1.25}
-    waypoints[12] = {-2,2} -- Top left goal
-    waypoints[13] = {-1,1}
-    waypoints[14] = {-2,0}
-    waypoints[15] = {-2,-1} -- Bottom left goal
-    waypoints[16] = {-0.75,-1.25}
-    waypoints[17] = {-1.5,-1.75}
-    waypoints[18] = {-2.25,-2.25}
-    waypoints[19] = {-1.5,-2.25}
-    waypoints[20] = {-0.5,-2.25}
-    waypoints[21] = {0.5,-2.25}
-    waypoints[22] = {1.5,-2.25}
+    waypoints[2] = {2,-1.5}
+    waypoints[3] = {2,-1}
+    waypoints[4] = {2,-0.5}
+    waypoints[5] = {2,0}
+    waypoints[6] = {2,0.5}
+    waypoints[7] = {2,1}
+    waypoints[8] = {2,1.5}
+    waypoints[9] = {2,2} -- Top right goal
+    waypoints[10] = {1.5,1.5}
+    waypoints[11] = {1,1}
+    waypoints[12] = {0.5,0.5}
+    waypoints[13] = {0,0} -- Centre goal
+    waypoints[14] = {0.6,0.6}
+    waypoints[15] = {1.25,1.25}
+    waypoints[16] = {0.6,1.25}
+    waypoints[17] = {0,1.25}
+    waypoints[18] = {-0.5,1.25}
+    waypoints[19] = {-1,1.25}
+    waypoints[20] = {-1.5,1.25}
+    waypoints[21] = {-2,1.25}
+    waypoints[22] = {-2,1.65}
+    waypoints[23] = {-2,2} -- Top left goal
+    waypoints[24] = {-2,1.5}
+    waypoints[25] = {-2,1}
+    waypoints[26] = {-2,0.5}
+    waypoints[27] = {-2,0}
+    waypoints[28] = {-2,-0.5}
+    waypoints[29] = {-2,-1} -- Bottom left goal
+    waypoints[30] = {-1.5,-1}
+    waypoints[31] = {-1,-1}
+    waypoints[32] = {-1,-1.5}
+    waypoints[33] = {-1,-1.75}
+    waypoints[34] = {-1.5,-1.75}
+    waypoints[35] = {-2,-1.75}
+    waypoints[36] = {-2,-2.25}
+    waypoints[37] = {-1.5,-2.25}
+    waypoints[38] = {-1,-2.25}
+    waypoints[39] = {-0.5,-2.25}
+    waypoints[40] = {0,-2.25}
+    waypoints[41] = {0.5,-2.25}
+    waypoints[42] = {1,-2.25}
+    waypoints[43] = {1.5,-2.25}
+    waypoints[44] = {2,-2.25}
 
     -- Used to find waypoint associated with a goal
     goalToWaypointMapping = {}
-    goalToWaypointMapping[1] = 7
-    goalToWaypointMapping[2] = 12
-    goalToWaypointMapping[3] = 1
-    goalToWaypointMapping[4] = 5
-    goalToWaypointMapping[5] = 15
+    goalToWaypointMapping[1] = 13 -- (0, 0)
+    goalToWaypointMapping[2] = 23 -- (-2, 2)
+    goalToWaypointMapping[3] = 1 -- (2, -2)
+    goalToWaypointMapping[4] = 9 -- (2, 2)
+    goalToWaypointMapping[5] = 29 -- (-2, -1)
 
     -- Determines the difference between consequtive angles that the turret
     -- is rotated to during the measurement step (rotated -pi to pi)
     turretAngleDeltaRad = math.rad(15)
     turretAngleTarget = -(math.pi - 0.01)
     sim.setJointTargetPosition(turretMotor, turretAngleTarget)
+    numberOfMeasurements = 0
+    maxNumberOfMeasurements = 12
 
     -- Record a series of measurements to update particles together (only need to resample once)
     distanceMeasurements = {}
@@ -675,23 +703,41 @@ function sysCall_actuation()
             newStepType = stepList[stepCounter][1]
 
             if (currentWaypoint == startingWaypoint) then
-                -- Reached destination
-                print("DESTINATION REACHED")
-                return
-            elseif (currentWaypoint == startingWaypoint + 1) then
-                -- Just started, don't increment yet
+                if (passedStartingWaypoint) then
+                    -- Reached destination
+                    reachedGoal(startingGoal, robotBase)
+                    print("DESTINATION REACHED")
+                    return
+                else
+                    passedStartingWaypoint = true
+                end
             elseif (currentWaypoint == goalToWaypointMapping[1]) then
-                -- TODO: Call reachedGoal() method and same for all other possible goals
+                print("Reached goal 1")
+                reachedGoal(1, robotBase)
+            elseif (currentWaypoint == goalToWaypointMapping[2]) then
+                print("Reached goal 2")
+                reachedGoal(2, robotBase)
+            elseif (currentWaypoint == goalToWaypointMapping[3]) then
+                print("Reached goal 3")
+                reachedGoal(3, robotBase)
+            elseif (currentWaypoint == goalToWaypointMapping[4]) then
+                print("Reached goal 4")
+                reachedGoal(4, robotBase)
+            elseif (currentWaypoint == goalToWaypointMapping[5]) then
+                print("Reached goal 5")
+                reachedGoal(5, robotBase)
             elseif (currentWaypoint == N_WAYPOINTS) then
-                currentWaypoint = 1
-            else
-                currentWaypoint = currentWaypoint + 1
+                currentWaypoint = 0
             end
+
+            currentWaypoint = currentWaypoint + 1
         end
 
         print("New step:", stepCounter, newStepType)
 
         if (newStepType == "read_waypoint") then
+            print("Waypoint is: ", currentWaypoint)
+
             -- Read next waypoint
             local waypoint = waypoints[currentWaypoint]
             local goalX = waypoint[1]
@@ -713,6 +759,12 @@ function sysCall_actuation()
 
             waypointRotationRadians = deltaTheta
             waypointDistanceMeter = math.sqrt(deltaX^2 + deltaY^2)
+
+            -- TODO: Remove after testing
+            print("currentTheta", currentTheta, "deltaT before norm", absoluteAngleToGoal - currentTheta)
+            print("currentX", currentX, "currentY", currentY)
+            print("goalX", goalX, "goalY", goalY)
+            print("waypointRotationRadians", waypointRotationRadians, "waypointDistanceMeter", waypointDistanceMeter)
         elseif (newStepType == "forward") then
             -- Forward step: set new joint targets
             motorAngleTargetL = posL + waypointDistanceMeter * motorAnglePerMetre
@@ -800,18 +852,8 @@ function sysCall_actuation()
         -- Just taking modulo 2*math.pi does not always work due to floating point errors.
         -- This is achieved using (math.pi - 0.01).
 
-        if math.abs(sim.getJointPosition(turretMotor) - turretAngleTarget) < 0.01 then
-            -- Reached the desired turret position => take measurement
-            local result, cleanDistance = sim.readProximitySensor(turretSensor)
-            if result > 0 then
-                noisyDistance = cleanDistance + gaussian(0.0, sensorVariance)
-
-                distanceMeasurements[#distanceMeasurements+1] = noisyDistance
-                turretAngleRads[#turretAngleRads+1] = turretAngleTarget
-            end
-
-            turretAngleTarget = turretAngleTarget + turretAngleDeltaRad
-        elseif turretAngleTarget + turretAngleDeltaRad >= (math.pi - 0.01) then
+        --print("turret target", turretAngleTarget, "turret current", sim.getJointPosition(turretMotor))
+        if numberOfMeasurements == maxNumberOfMeasurements then
             -- Finished all measurements
 
             -- Combined measurement update
@@ -821,20 +863,38 @@ function sysCall_actuation()
 
             -- Reset turret
             turretAngleTarget = -(math.pi - 0.01)
+            sim.setObjectInt32Param(turretMotor, sim.jointintparam_ctrl_enabled, 1) -- Put in position control mode
             sim.setJointTargetPosition(turretMotor, turretAngleTarget)
 
             -- Check if need to set starting location
             if startingWaypoint == -1 then
-                local startingGoal = getClosestGoalFromCoordinates(pointEstimateX(), pointEstimateY())
+                startingGoal = getClosestGoalFromCoordinates(pointEstimateX(), pointEstimateY())
                 startingWaypoint = goalToWaypointMapping[startingGoal]
-                currentWaypoint = startingWaypoint + 1
+                currentWaypoint = startingWaypoint
                 print("Starting waypoint is:", startingWaypoint)
             end
-
+            
+            numberOfMeasurements = 0
             stepCompletedFlag = true
         else
             -- Rotate turret
-            sim.setJointTargetPosition(turretMotor, turretAngleTarget)
+            --sim.setJointTargetPosition(turretMotor, turretAngleTarget)
+            sim.setObjectInt32Param(turretMotor, sim.jointintparam_ctrl_enabled, 0) -- Put in velocity control mode
+            sim.setJointTargetVelocity(turretMotor, 10)
+
+            -- Take measurement
+            local turretAngleCurrent = sim.getJointPosition(turretMotor)
+            local result, cleanDistance = sim.readProximitySensor(turretSensor)
+            if result > 0 then
+                noisyDistance = cleanDistance + gaussian(0.0, sensorVariance)
+
+                distanceMeasurements[#distanceMeasurements+1] = noisyDistance
+                turretAngleRads[#turretAngleRads+1] = turretAngleCurrent
+            end
+
+            turretAngleTarget = turretAngleTarget + turretAngleDeltaRad
+
+            numberOfMeasurements = numberOfMeasurements + 1
         end
     end
 
