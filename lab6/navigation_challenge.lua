@@ -683,6 +683,25 @@ function pointEstimateTheta()
 end
 
 
+function closeEnoughToGoal(goal)
+    local goalPos = {};
+    if goal == 1 then
+        goalPos = {0, 0}
+    elseif goal == 2 then
+        goalPos = {-2, 2}
+    elseif goal == 3 then
+        goalPos = {2, -2}
+    elseif goal == 4 then
+        goalPos = {2, 2}
+    else
+        goalPos = {-2, -1}
+    end
+
+    -- Close enough if less than 5cm away (Use 4cm to be save)
+    return euclideanDistance(goalPos[1], goalPos[2], pointEstimateX(), pointEstimateY()) < 0.04
+end
+
+
 function sysCall_actuation() 
     tt = sim.getSimulationTime() 
 
@@ -712,20 +731,40 @@ function sysCall_actuation()
                     passedStartingWaypoint = true
                 end
             elseif (currentWaypoint == goalToWaypointMapping[1]) then
-                print("Reached goal 1")
-                reachedGoal(1, robotBase)
+                if closeEnoughToGoal(1) then
+                    print("Reached goal 1")
+                    reachedGoal(1, robotBase)
+                else
+                    currentWaypoint = currentWaypoint -1
+                end
             elseif (currentWaypoint == goalToWaypointMapping[2]) then
-                print("Reached goal 2")
-                reachedGoal(2, robotBase)
+                if closeEnoughToGoal(2) then
+                    print("Reached goal 2")
+                    reachedGoal(2, robotBase)
+                else
+                    currentWaypoint = currentWaypoint -1
+                end
             elseif (currentWaypoint == goalToWaypointMapping[3]) then
-                print("Reached goal 3")
-                reachedGoal(3, robotBase)
+                if closeEnoughToGoal(3) then
+                    print("Reached goal 3")
+                    reachedGoal(3, robotBase)
+                else
+                    currentWaypoint = currentWaypoint -1
+                end
             elseif (currentWaypoint == goalToWaypointMapping[4]) then
-                print("Reached goal 4")
-                reachedGoal(4, robotBase)
+                if closeEnoughToGoal(4) then
+                    print("Reached goal 4")
+                    reachedGoal(4, robotBase)
+                else
+                    currentWaypoint = currentWaypoint -1
+                end
             elseif (currentWaypoint == goalToWaypointMapping[5]) then
-                print("Reached goal 5")
-                reachedGoal(5, robotBase)
+                if closeEnoughToGoal(5) then
+                    print("Reached goal 5")
+                    reachedGoal(5, robotBase)
+                else
+                    currentWaypoint = currentWaypoint -1
+                end
             elseif (currentWaypoint == N_WAYPOINTS) then
                 currentWaypoint = 0
             end
@@ -873,7 +912,7 @@ function sysCall_actuation()
                 currentWaypoint = startingWaypoint
                 print("Starting waypoint is:", startingWaypoint)
             end
-            
+
             numberOfMeasurements = 0
             stepCompletedFlag = true
         else
