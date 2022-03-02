@@ -798,12 +798,6 @@ function sysCall_actuation()
 
             waypointRotationRadians = deltaTheta
             waypointDistanceMeter = math.sqrt(deltaX^2 + deltaY^2)
-
-            -- TODO: Remove after testing
-            print("currentTheta", currentTheta, "deltaT before norm", absoluteAngleToGoal - currentTheta)
-            print("currentX", currentX, "currentY", currentY)
-            print("goalX", goalX, "goalY", goalY)
-            print("waypointRotationRadians", waypointRotationRadians, "waypointDistanceMeter", waypointDistanceMeter)
         elseif (newStepType == "forward") then
             -- Forward step: set new joint targets
             motorAngleTargetL = posL + waypointDistanceMeter * motorAnglePerMetre
