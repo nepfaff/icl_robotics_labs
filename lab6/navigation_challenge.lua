@@ -887,10 +887,6 @@ function sysCall_actuation()
         speedBaseL = 0
         speedBaseR = 0
 
-        -- NOTE: The below code ensures that 2*math.pi does not occur as hard to compare with 0.
-        -- Just taking modulo 2*math.pi does not always work due to floating point errors.
-        -- This is achieved using (math.pi - 0.01).
-
         --print("turret target", turretAngleTarget, "turret current", sim.getJointPosition(turretMotor))
         if numberOfMeasurements == maxNumberOfMeasurements then
             -- Finished all measurements
