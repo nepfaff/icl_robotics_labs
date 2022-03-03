@@ -584,7 +584,7 @@ function updateParticlesAfterMeasurement(distanceMeasurements, turretAngleRads)
         for j=1, #distanceMeasurements do
              -- Account for turret rotation by adding turret angle to the particle's angle
             local likelihood = calculateLikelihood(xArray[i], yArray[i], thetaArray[i] + turretAngleRads[j], distanceMeasurements[j])
-            weightArray[i] = weightArray[i] * likelihood
+            weightArray[i] = weightArray[i] * likelihood * 1000 -- Factor of 1000 to avoid too small numbers
         end
     end
 
