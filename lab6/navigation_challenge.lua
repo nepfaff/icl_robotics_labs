@@ -320,7 +320,8 @@ function sysCall_init()
     turretAngleTarget = -(math.pi - 0.01)
     sim.setJointTargetPosition(turretMotor, turretAngleTarget)
     numberOfMeasurements = 0
-    maxNumberOfMeasurements = 12
+    maxNumberMeasurements = 12
+    maxNumberMeasurementsGoal = 30 -- Take more measurments at goal
 
     -- Record a series of measurements to update particles together (only need to resample once)
     distanceMeasurements = {}
@@ -334,7 +335,7 @@ function sysCall_init()
     dummyArray = {}
     -- Both numberOfParticles and numberOfParticleSecondRound must be a multiple of N_GOALS!
     numberOfParticles = 1000
-    numberOfParticleSecondRound = 100 -- Only need lots of particles to determine initial location
+    numberOfParticleSecondRound = 150 -- Only need lots of particles to determine initial location
     numberOfDummes = numberOfParticleSecondRound
 
     initialiseParticles()
@@ -670,6 +671,24 @@ function getClosestGoalFromCoordinates(x, y)
 end
 
 
+function getGoalWaypoints()
+    return {goalToWaypointMapping[1], goalToWaypointMapping[2],
+            goalToWaypointMapping[3], goalToWaypointMapping[4],
+            goalToWaypointMapping[5]}
+end
+
+
+function isWaypointGoalWaypoint(waypoint)
+    local goalWaypoints = getGoalWaypoints();
+    for i=1,#goalWaypoints do
+        if goalWaypoints[i] == waypoint then
+            return true
+        end
+    end
+    return false
+end
+
+
 function pointEstimateX()
     return weighted_sum(xArray, weightArray)
 end
@@ -883,8 +902,13 @@ function sysCall_actuation()
         speedBaseL = 0
         speedBaseR = 0
 
+        local maxMeasurements = maxNumberMeasurements
+        if isWaypointGoalWaypoint(currentWaypoint) then
+            maxMeasurements = maxNumberMeasurementsGoal
+        end
+
         --print("turret target", turretAngleTarget, "turret current", sim.getJointPosition(turretMotor))
-        if numberOfMeasurements == maxNumberOfMeasurements then
+        if numberOfMeasurements == maxMeasurements then
             -- Finished all measurements
 
             -- Combined measurement update
