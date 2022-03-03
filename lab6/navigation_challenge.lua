@@ -702,8 +702,8 @@ function closeEnoughToGoal(goal)
 end
 
 
-function sysCall_actuation() 
-    tt = sim.getSimulationTime() 
+function sysCall_actuation()
+    tt = sim.getSimulationTime()
 
     -- Get current angles of motor joints
     posL = sim.getJointPosition(leftMotor)
@@ -721,52 +721,54 @@ function sysCall_actuation()
             stepCounter = 1
             newStepType = stepList[stepCounter][1]
 
+            if (passedStartingWaypoint) then
+                if (currentWaypoint == goalToWaypointMapping[1]) then
+                    if closeEnoughToGoal(1) then
+                        print("Reached goal 1")
+                        reachedGoal(1, robotBase)
+                    else
+                        currentWaypoint = currentWaypoint - 1
+                    end
+                elseif (currentWaypoint == goalToWaypointMapping[2]) then
+                    if closeEnoughToGoal(2) then
+                        print("Reached goal 2")
+                        reachedGoal(2, robotBase)
+                    else
+                        currentWaypoint = currentWaypoint - 1
+                    end
+                elseif (currentWaypoint == goalToWaypointMapping[3]) then
+                    if closeEnoughToGoal(3) then
+                        print("Reached goal 3")
+                        reachedGoal(3, robotBase)
+                    else
+                        currentWaypoint = currentWaypoint - 1
+                    end
+                elseif (currentWaypoint == goalToWaypointMapping[4]) then
+                    if closeEnoughToGoal(4) then
+                        print("Reached goal 4")
+                        reachedGoal(4, robotBase)
+                    else
+                        currentWaypoint = currentWaypoint - 1
+                    end
+                elseif (currentWaypoint == goalToWaypointMapping[5]) then
+                    if closeEnoughToGoal(5) then
+                        print("Reached goal 5")
+                        reachedGoal(5, robotBase)
+                    else
+                        currentWaypoint = currentWaypoint - 1
+                    end
+                elseif (currentWaypoint == N_WAYPOINTS) then
+                    currentWaypoint = 0
+                end
+            end
+
             if (currentWaypoint == startingWaypoint) then
                 if (passedStartingWaypoint) then
-                    -- Reached destination
-                    reachedGoal(startingGoal, robotBase)
                     print("DESTINATION REACHED")
                     return
                 else
                     passedStartingWaypoint = true
                 end
-            elseif (currentWaypoint == goalToWaypointMapping[1]) then
-                if closeEnoughToGoal(1) then
-                    print("Reached goal 1")
-                    reachedGoal(1, robotBase)
-                else
-                    currentWaypoint = currentWaypoint -1
-                end
-            elseif (currentWaypoint == goalToWaypointMapping[2]) then
-                if closeEnoughToGoal(2) then
-                    print("Reached goal 2")
-                    reachedGoal(2, robotBase)
-                else
-                    currentWaypoint = currentWaypoint -1
-                end
-            elseif (currentWaypoint == goalToWaypointMapping[3]) then
-                if closeEnoughToGoal(3) then
-                    print("Reached goal 3")
-                    reachedGoal(3, robotBase)
-                else
-                    currentWaypoint = currentWaypoint -1
-                end
-            elseif (currentWaypoint == goalToWaypointMapping[4]) then
-                if closeEnoughToGoal(4) then
-                    print("Reached goal 4")
-                    reachedGoal(4, robotBase)
-                else
-                    currentWaypoint = currentWaypoint -1
-                end
-            elseif (currentWaypoint == goalToWaypointMapping[5]) then
-                if closeEnoughToGoal(5) then
-                    print("Reached goal 5")
-                    reachedGoal(5, robotBase)
-                else
-                    currentWaypoint = currentWaypoint -1
-                end
-            elseif (currentWaypoint == N_WAYPOINTS) then
-                currentWaypoint = 0
             end
 
             currentWaypoint = currentWaypoint + 1
