@@ -295,8 +295,8 @@ function sysCall_init()
     waypoints[32] = {-1,-1.5}
     waypoints[33] = {-1,-1.75}
     waypoints[34] = {-1.5,-1.75}
-    waypoints[35] = {-2,-1.75}
-    waypoints[36] = {-2,-2.25}
+    waypoints[35] = {-1.75,-1.75}
+    waypoints[36] = {-1.75,-2.25}
     waypoints[37] = {-1.5,-2.25}
     waypoints[38] = {-1,-2.25}
     waypoints[39] = {-0.5,-2.25}
