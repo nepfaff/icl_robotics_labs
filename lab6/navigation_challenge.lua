@@ -506,8 +506,8 @@ function calculateLikelihood(x, y, theta, z)
     local likelihood = math.exp(- (z - m)^2 / (2*sensorVariance)) + sensorNoiseConstant
 
     if (m == math.huge) then
-        print("NO ACTUAL DISTANCE TO WALL FOUND: Assume likelihood is one")
-        likelihood = 1.0
+        print("NO ACTUAL DISTANCE TO WALL FOUND")
+        likelihood = 1.0 / 100
     end
 
     return likelihood
